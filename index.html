@@ -41,7 +41,6 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 </div>
 <div class="stats"><span class="stat">✦ 步數 <strong id="moves">0</strong></span><span class="stat">◷ 時間 <strong id="time">00:00</strong></span></div>
 <div class="progress-wrap"><span>拼圖進度</span><div class="progress-track" aria-hidden="true"><div id="progressFill" class="progress-fill"></div></div><span id="progress"></span></div>
-<button id="rivalAlert" class="rival-alert" type="button" hidden>😼 對手正在挑釁！點擊查看</button>
 <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs id="puzzleClips"></defs></svg>
 <div class="layout"><div id="board" class="board" aria-label="拼圖區"></div><aside class="side"><p class="side-title">✦ 拼圖小幫手</p><img id="preview" class="preview hidden" alt="本局完整圖片"><div id="notice" class="notice" role="status" aria-live="polite"></div><div id="source" class="source"></div><section class="rival" aria-label="模擬對手"><div class="rival-head"><span>同桌對手</span><button id="rivalToggle" type="button" aria-pressed="true">吐槽：開</button></div><div id="rivalAvatar" class="rival-avatar" role="img" aria-label="同桌對手肖像"></div><p id="rivalSpeech" class="rival-speech" aria-live="polite" tabindex="-1">準備好了嗎？我可不會手下留情！</p></section></aside></div>
 </section>
@@ -91,8 +90,8 @@ function makePuzzleShapes(n) {
   }
 }
 let rivalEnabled = true, rivalTimer = null, rivalAlertTimer = null, victoryTimer = null, lastVictoryLine = -1, lastRivalLine = -1, rivalDeck = [];
-function stopRival() { clearTimeout(rivalTimer); clearTimeout(rivalAlertTimer); clearTimeout(victoryTimer); rivalTimer = null; $('rivalAlert').hidden=true; }
-function rivalSay(line) { const bubble=$('rivalSpeech'), avatar=$('rivalAvatar'); bubble.textContent=line; for(const el of [bubble,avatar]){el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');} if(audio) sound('rival'); $('rivalAlert').textContent=won?'😼 對手有話要說！點擊查看':'😼 對手正在挑釁！點擊查看'; $('rivalAlert').hidden=false; clearTimeout(rivalAlertTimer); rivalAlertTimer=setTimeout(()=>$('rivalAlert').hidden=true,6000); }
+function stopRival() { clearTimeout(rivalTimer); clearTimeout(rivalAlertTimer); clearTimeout(victoryTimer); rivalTimer = null; }
+function rivalSay(line) { const bubble=$('rivalSpeech'), avatar=$('rivalAvatar'); bubble.textContent=line; for(const el of [bubble,avatar]){el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');} if(audio) sound('rival'); }
 function scheduleRival() {
   clearTimeout(rivalTimer); rivalTimer = null;
   if (!rivalEnabled || won || !imageURL) return;
@@ -166,7 +165,6 @@ async function newGame() {
 $('newGame').addEventListener('click',newGame); theme.addEventListener('change',newGame); difficulty.addEventListener('change',()=>{if(imageURL)reset();}); $('restart').addEventListener('click',()=>{if(imageURL)reset();}); document.getElementById('previewButton').addEventListener('click',()=>setPreview(document.getElementById('preview').classList.contains('hidden')));
 $('shape').addEventListener('change',()=>{if(imageURL)render();});
 $('rivalToggle').addEventListener('click',()=>{rivalEnabled=!rivalEnabled; $('rivalToggle').setAttribute('aria-pressed',String(rivalEnabled)); $('rivalToggle').textContent=rivalEnabled?'吐槽：開':'吐槽：關'; $('rivalSpeech').textContent=rivalEnabled?(won?'等下一局再來較勁！':'我回來盯著你啦！'):'對手安靜休息中。'; if(rivalEnabled) scheduleRival(); else stopRival();});
-$('rivalAlert').addEventListener('click',()=>{ $('rivalAlert').hidden=true; $('rivalSpeech').scrollIntoView({block:'nearest'}); $('rivalSpeech').focus({preventScroll:true}); });
 console.assert(shuffle([0]).length===1 && [0,1,2].every((x,i)=>x===i),'基本拼圖檢查失敗');
 newGame();
 </script>
