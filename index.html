@@ -45,30 +45,18 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 <div class="stats"><span class="stat">✦ 步數 <strong id="moves">0</strong></span><span class="stat">◷ 時間 <strong id="time">00:00</strong></span></div>
 <div class="progress-wrap"><span>拼圖進度</span><div class="progress-track" aria-hidden="true"><div id="progressFill" class="progress-fill"></div></div><span id="progress"></span></div>
 <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs id="puzzleClips"></defs></svg>
-<div class="layout"><div id="board" class="board" aria-label="拼圖區"></div><aside class="side"><p class="side-title">✦ 拼圖小幫手</p><img id="preview" class="preview hidden" alt="本局完整圖片"><div id="notice" class="notice" role="status" aria-live="polite"></div><div id="source" class="source"></div><section class="rival" aria-label="模擬對手"><div class="rival-head"><span>同桌對手</span><button id="rivalToggle" type="button" aria-pressed="true">吐槽：開</button></div><div id="rivalAvatar" class="rival-avatar" role="img" aria-label="同桌對手肖像"></div><p id="rivalSpeech" class="rival-speech" aria-live="polite" tabindex="-1">準備好了嗎？我可不會手下留情！</p></section></aside></div>
+<div class="layout"><div id="board" class="board" aria-label="拼圖區"></div><aside class="side"><p class="side-title">✦ 拼圖小幫手</p><img id="preview" class="preview hidden" alt="本局完整圖片"><div id="notice" class="notice" role="status" aria-live="polite"></div><div id="source" class="source"></div><section class="rival" aria-label="吃瓜路人"><div class="rival-head"><span>吃瓜路人</span><button id="rivalToggle" type="button" aria-pressed="true">吐槽：開</button></div><div id="rivalAvatar" class="rival-avatar" role="img" aria-label="吃瓜路人肖像"></div><p id="rivalSpeech" class="rival-speech" aria-live="polite" tabindex="-1">瓜已備好，請開始你的表演。</p></section></aside></div>
 </section>
 </main>
 <script>
 'use strict';
 const GAME_NAME = '拼到你脫窗';
-const RIVAL_LINES = [
-  '你怎麼這麼慢，我都快喝完茶了。','這塊拼很久了吧？它都等累了。','哎呀，這一步是聲東擊西嗎？','別急，我有一整天可以等。','看來這張圖比你想的還有個性。',
-  '要不要我假裝沒看到剛才那一步？','不錯喔，至少拼圖還在桌上。','你是不是在和圖塊培養感情？','這速度，蝸牛都想替你加油了。','那塊又搬家啦？還沒找到歸宿嗎？',
-  '我剛剛打了個盹，你還在想這一塊呀？','別緊張，我只是在旁邊默默計時。','這是拼圖，還是圖塊環島旅行？','你剛剛那一步，很有實驗精神！','我猜你有一套神祕的拼圖策略。',
-  '這塊都來回三次了，是捨不得離開嗎？','慢工出細活……你一定做得特別細。','我先數數星星，等你找到下一塊。','你是在幫圖塊找室友嗎？','看你的表情，這題似乎不簡單喔。',
-  '那塊是不是偷偷換位置了？','我看得出來，你正在認真思考人生。','別擔心，拼圖沒有下班時間。','這張圖原來還可以這樣排列呀！','你在測試我的耐心嗎？很成功喔。',
-  '差一點點！至於差多少，我就不說了。','這一手出得真妙，連拼圖都愣住了。','你的圖塊好像很喜歡四處散步。','要不要先跟角落的圖塊打聲招呼？','我覺得你離答案越來越近……大概吧。',
-  '這速度很適合泡一壺好茶呢。','你是不是故意讓我有機會追上？','看來你和這塊圖有一段故事。','如果猶豫也算步數，你早就破紀錄了。','我剛眨個眼，你還在選同一塊？',
-  '這拼法很有創意，就是有點抽象。','我已經開始替圖塊想名字了。','你在找拼圖，還是在找靈感？','別看我，答案不會寫在我臉上。','這塊好像在對你說：再想想。',
-  '我差點以為你在幫拼圖重新裝潢。','穩住，你的傳奇操作就快出現了。','你這是在慢慢享受，對吧？','那一步讓我都忍不住重新思考了。','拼圖不會跑，但時間會喔。',
-  '你很有耐心，我也正在學習。','這個位置看起來很熟悉，是不是來過？','我準備好了，你什麼時候準備好？','你的下一步，我決定拭目以待。','加油！我還等著看你翻盤呢。',
-  '你這叫策略？我還以為是圖塊自己摔的。','照這速度，拼完可以直接慶祝週年了。','你每換一步，答案就離家出走一次。','我以為你在熱身，原來已經開始了？','拼圖看到你的操作，開始懷疑自己的位置。',
-  '你不是卡關，你是在這裡定居了吧。','這步真精彩，我差點以為你按錯了。','原來你的戰術是先把自己繞暈。','你離成功只差一步，偏偏每一步都不是。','圖塊都認路了，你還在研究地圖？',
-  '你剛才那招，我稱它為原地踏步。','再這樣換下去，圖塊都要申請加班費了。','別急著贏，畢竟目前看來不用擔心。','我都替正確答案感到寂寞了。','你對錯誤的位置還真是情有獨鍾。',
-  '你的拼圖技巧，讓隨機排列都顯得有計畫。','我猜下一步……算了，你的思路太神祕。','這麼認真地走錯路，也是一種天分。','你是來解謎的，還是來增加難度的？','你繼續，我正記錄什麼叫做完美的反面教材。'
-];
+const RIVAL_LINES = ["這速度，我的瓜都吃完第二盤了。","那塊轉來轉去，是在找停車位嗎？","我以為快拼好了，原來只是換個地方亂。","旁觀這麼久，我都快跟圖塊混熟了。","這一步下去，答案又多繞了一圈。","你跟那塊是不是有什麼私人恩怨？","剛剛差點以為你有計畫，嚇我一跳。","這局的懸念不是能不能贏，是什麼時候。","我瓜子都嗑完了，你還在思考那一塊？","圖塊：我到底哪裡得罪你了？","不急不急，旁邊的觀眾只是坐到腿麻。","這操作很有創意，答案看了都沉默。","你是在拼圖，還是在幫圖塊搬家？","我差點睡著，還好你又把它換回去了。","你這是走一步，替自己出兩道題。","看起來很忙，但拼圖好像不這麼認為。","這張圖被你拼出了懸疑劇的氣氛。","我原本只是路過，現在都快住下了。","圖塊位置變了，進度倒是很有定力。","這一手漂亮，成功避開正確答案。","觀眾席一致認為你很有耐心。","你對錯誤位置是真愛吧，總是回去找它。","等等，我去拿點瓜，這戲值得慢慢看。","你這一步讓我差點鼓掌，差點而已。","原來迷路的不只圖塊，還有你的策略。","看你這麼認真，拼圖都不好意思自己完成。","這不是卡關，這是與圖塊深度交流。","我剛眨了一下眼，你還在原地啊？","再多換幾次，說不定就能繞回答案。","你的手速很好，方向感可以再商量。","這場面我得搬張椅子坐著看。","你不是在拖時間，是時間在陪你散步。","那塊在這裡待過吧？它眼神都熟了。","我還以為這是速通，原來是慢遊。","你這拼法，連預覽圖都想出來解釋。","觀眾已經開始猜下一塊會不會又換回去。","你每一步都很有勇氣，就是答案比較害羞。","這盤瓜我都吃到剩籽了。","我不說話，你是不是就以為沒人看到？","你這策略叫什麼？驚喜連連？","圖塊已經旅行一圈，該回家了吧。","看得出來你很努力，圖塊可能沒看出來。","這難度不高，你倒是很會替它加戲。","觀眾朋友們，奇蹟還在路上。","你的預覽圖正在旁邊默默嘆氣。","要不要先休息一下，讓圖塊冷靜？","這一步相當果斷，可惜方向有點自由。","我現在最期待的是你突然靈光一閃。","你再這樣換，我都快背起原圖了。","沒關係，瓜還有很多，時間嘛……","那塊是不是跟你玩躲貓貓？","這拼法我看不懂，但我大受震撼。","你跟正確答案的距離真是忽遠忽近。","別緊張，圍觀的人只有我和這堆瓜。","我路過而已，怎麼看到連續劇了？","這操作值得重播，讓我再笑一次。","你不是手慢，是在延長觀眾的娛樂時間。","答案明明在圖裡，你們怎麼還沒相遇？","圖塊每次看到你伸手都會緊張吧。","看來今天的主菜是耐心，配菜是拼圖。","這一步走得很瀟灑，拼圖看得很迷惘。","你先拼，我幫你保管剩下的耐心。","眼看就要成功，結果你決定增加劇情。","我不催，我只是每隔幾秒提醒一下。","拼圖沒說話，但我替它感到困惑。","這不是亂拼，這叫自由排列藝術。","我的瓜快不夠了，你的步數倒是很充足。","剛剛的自信哪去了？我幫你找找。","原來你想挑戰的是觀眾的耐性。","別看我，我只是碰巧目睹了一切。","這塊又換位置了，真是個旅行家。","有進步喔，至少你沒有把手機倒過來。","你這一波操作，讓難度自己升級了。","旁觀者清，但我決定先繼續吃瓜。","這局只要再加一點運氣和很多準確度就贏了。","圖塊：我想找個穩定的家。","你這麼堅持錯誤答案，真的令人佩服。","我瓜都切好了，你的圖呢？","你剛剛差一點就對了，可惜只差一點。","好了好了，我不笑，你繼續。","是不是想讓觀眾多欣賞幾次這張圖？","旁邊的瓜都比你先找到位置。","你的操作充滿了未知，尤其是下一步。","這局真有看頭，完全猜不到何時結束。","我只是吃瓜，但這段值得記錄。","你慢慢拼，我先幫觀眾續茶。","拼得不錯，距離正確還有發展空間。","我懷疑你在跟拼圖玩交換禮物。","如果猶豫可以得分，你已經第一名。","繼續繼續，觀眾的瓜還沒吃完！"];
+const RIVAL_START_LINES = ["來了來了，讓我看看今天的拼圖高手。","瓜已備好，請開始你的表演。","我只是路過，順便看看你會卡多久。","觀眾就位！這局可別讓圖塊等太久。","聽說有人要挑戰拼圖？我先坐下。","開場了開場了，瓜子準備好了。","這張圖看起來不難……對你來說呢？","旁觀者已就位，你的精彩操作呢？","讓我看看，是你拼圖，還是拼圖拼你。","我不打擾，就在旁邊安靜吃瓜。"];
+let lastStartLine = -1;
+function rivalStart() { let i=Math.floor(Math.random()*(RIVAL_START_LINES.length-(lastStartLine>=0?1:0))); if(lastStartLine>=0 && i>=lastStartLine)i++; lastStartLine=i; return RIVAL_START_LINES[i]; }
 const RIVAL_INTERVAL_MS = [7000, 14000];
-const VICTORY_LINES = ['這次算你厲害，下次可沒那麼容易！','你是不是偷偷練習過？老實招來！','哼，這次是圖塊自己走對的吧！','我只是讓你一局，別太得意！','看不出來嘛，手速還挺快的。','這張圖一定偷偷提示你了！','好啦，這局你贏，下一局走著瞧。','我剛剛只是分心喝了口茶！','厲害喔，害我連吐槽都忘了。','你贏了？我要求檢查一下拼圖！','好吧，這次掌聲先借你用一下。','我承認，剛才小看你了那麼一點。','哎呀，原來你真的會拼啊！','這一局給你，下局我要認真了。','你的運氣不錯，實力嘛……也還行！','我剛才的嘲諷是不是反而幫到你了？','別高興太早，下一張我可盯緊了！','算你過關，但我的嘴可沒輸。','太精彩了！不過我絕對不會說第二遍。','你這次贏得漂亮，讓我很難繼續嘴硬耶。'];
+const VICTORY_LINES = ["喔唷，竟然真的拼好了！","這場面值得鼓掌，瓜先放下。","旁觀認證：這局拼得漂亮！","我還沒吃完瓜，你就完成啦？","好吧，剛才是我小看你了。","觀眾席全體起立……好啦只有我。","這波操作可以，讓我無話可說。","拼好了！我的吐槽居然成了加油聲。","厲害，今天這趟沒有白來圍觀。","原來你是先暖機，失敬失敬。","圖塊終於回家，觀眾也能安心吃瓜了。","不錯嘛，剛剛那些話當我沒說。","這局真的有料，不只是我的瓜。","結局精彩，我差點忘了吐槽。","恭喜過關，路人表示佩服一秒鐘。","看來拼圖還是難不倒你呀。","太精彩了，下一局我還要看。","這反轉我沒猜到，高手竟在我眼前。","這回贏得漂亮，觀眾服氣！","我宣布：今天的瓜值得！"];
 document.title = GAME_NAME; document.getElementById('title').textContent = GAME_NAME;
 const $ = id => document.getElementById(id);
 const board = $('board'), theme = $('theme'), difficulty = $('difficulty');
@@ -118,7 +106,7 @@ function shuffle(a) { for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.rand
 function reset() {
   stopRival(); $('rivalAvatar').classList.remove('defeated'); clearInterval(timer); won=false; selected=null; moves=0; started=Date.now(); $('moves').textContent='0'; $('time').textContent='00:00'; board.classList.remove('won'); $('notice').textContent='點選兩塊拼圖來交換位置。'; $('notice').className='notice';
   const count=Number(difficulty.value)**2; do {tiles=shuffle(Array.from({length:count},(_,i)=>i));} while(tiles.every((n,i)=>n===i));
-  timer=setInterval(()=>{const s=Math.floor((Date.now()-started)/1000);$('time').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');},1000); $('rivalSpeech').textContent=rivalEnabled?'準備好了嗎？我可不會手下留情！':'對手安靜休息中。'; scheduleRival(); render();
+  timer=setInterval(()=>{const s=Math.floor((Date.now()-started)/1000);$('time').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');},1000); $('rivalSpeech').textContent=rivalEnabled?rivalStart():'路人安靜吃瓜中。'; scheduleRival(); render();
 }
 function render() {
   const n=Number(difficulty.value); board.style.gridTemplateColumns=`repeat(${n},1fr)`; board.replaceChildren();
@@ -167,7 +155,7 @@ async function newGame() {
 }
 $('newGame').addEventListener('click',newGame); theme.addEventListener('change',newGame); difficulty.addEventListener('change',()=>{if(imageURL)reset();}); $('restart').addEventListener('click',()=>{if(imageURL)reset();}); document.getElementById('previewButton').addEventListener('click',()=>setPreview(document.getElementById('preview').classList.contains('hidden')));
 $('shape').addEventListener('change',()=>{if(imageURL)render();});
-$('rivalToggle').addEventListener('click',()=>{rivalEnabled=!rivalEnabled; $('rivalToggle').setAttribute('aria-pressed',String(rivalEnabled)); $('rivalToggle').textContent=rivalEnabled?'吐槽：開':'吐槽：關'; $('rivalSpeech').textContent=rivalEnabled?(won?'等下一局再來較勁！':'我回來盯著你啦！'):'對手安靜休息中。'; if(rivalEnabled) scheduleRival(); else stopRival();});
+$('rivalToggle').addEventListener('click',()=>{rivalEnabled=!rivalEnabled; $('rivalToggle').setAttribute('aria-pressed',String(rivalEnabled)); $('rivalToggle').textContent=rivalEnabled?'吐槽：開':'吐槽：關'; $('rivalSpeech').textContent=rivalEnabled?(won?'等下一局再來吃瓜！':'路人回來圍觀啦！'):'路人安靜吃瓜中。'; if(rivalEnabled) scheduleRival(); else stopRival();});
 console.assert(shuffle([0]).length===1 && [0,1,2].every((x,i)=>x===i),'基本拼圖檢查失敗');
 newGame();
 </script>
