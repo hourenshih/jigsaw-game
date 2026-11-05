@@ -29,6 +29,9 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 <style>.side .rival{order:-1;border-top:0;border-bottom:1px solid #486257;padding-top:0;padding-bottom:16px}</style>
 <style>@media(max-width:650px){.side .preview{grid-column:1/-1;grid-row:auto;width:100%;aspect-ratio:auto;max-height:75vh;object-fit:contain}.side .notice,.side .source{grid-column:1/-1}}</style>
 <style>@media(max-width:650px){.side .rival{display:grid;grid-template-columns:minmax(90px,32%) minmax(0,1fr);gap:10px;align-items:center}.rival-head{grid-column:1/-1}.side .rival-avatar{width:100%;max-width:none;margin:0;aspect-ratio:4/3}.side .rival-speech{margin:0;font-size:.9rem}.side .rival-speech::before{top:18px;left:-10px;transform:rotate(-45deg)}}</style>
+<style>
+.board{touch-action:none;user-select:none;-webkit-user-select:none}.tile{cursor:grab;-webkit-user-drag:none}.tile:hover,.tile:active{transform:none}.board.dragging .tile{cursor:grabbing}.tile.drag-source{opacity:.25}.drop-target{position:absolute;pointer-events:none;z-index:5;border:4px solid #ffe498;border-radius:8px;background:#ffe49822;box-shadow:inset 0 0 0 2px #263c3b}.drag-ghost{position:fixed!important;margin:0;pointer-events:none;z-index:1000!important;opacity:.95;filter:drop-shadow(0 7px 5px #0008);transition:none!important;transform:scale(1.03)}
+</style>
 </head>
 <body>
 <main>
@@ -40,6 +43,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 <label>圖塊外形<select id="shape"><option value="square">方形</option><option value="classic">經典拼圖</option></select></label>
 <button class="primary" id="newGame">新遊戲</button>
 <button id="restart">重新開始</button>
+<button id="haptics" type="button" aria-pressed="true" hidden>震動：開</button>
 <button id="previewButton" aria-expanded="false">預覽完整圖片</button>
 </div>
 <div class="stats"><span class="stat">✦ 步數 <strong id="moves">0</strong></span><span class="stat">◷ 時間 <strong id="time">00:00</strong></span></div>
@@ -63,6 +67,7 @@ const board = $('board'), theme = $('theme'), difficulty = $('difficulty');
 const categories = {animals:['Category:Kittens'], funny:['Category:Internet memes','Category:Memes and image macros','Category:Lolcats','Category:Image macros with animals'], food:['Category:Food photography'], landscape:['Category:Landscape photography'], toys:['Category:Toys','Category:Close-up photographs of toys'], illustration:["Category:Children's book illustrations"], challenge:['Category:Geometric patterns','Category:Quality images of patterns and textures']};
 const recent = {animals:[], funny:[], food:[], landscape:[], toys:[], illustration:[], challenge:[]};
 let tiles = [], selected = null, moves = 0, started = 0, timer = null, won = false, imageURL = '', gameId = 0, audio;
+let drag = null, suppressClickUntil = 0, settling = false, settleTimer = null, hapticsEnabled = true;
 let shapeSize = 0;
 function makePuzzleShapes(n) {
   shapeSize=n;
@@ -82,13 +87,14 @@ function makePuzzleShapes(n) {
 }
 let rivalEnabled = true, rivalTimer = null, rivalAlertTimer = null, victoryTimer = null, lastVictoryLine = -1, lastRivalLine = -1, rivalDeck = [];
 function stopRival() { clearTimeout(rivalTimer); clearTimeout(rivalAlertTimer); clearTimeout(victoryTimer); rivalTimer = null; }
-function rivalSay(line) { const bubble=$('rivalSpeech'), avatar=$('rivalAvatar'); bubble.textContent=line; for(const el of [bubble,avatar]){el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');} if(audio) sound('rival'); }
+function rivalSay(line) { const bubble=$('rivalSpeech'), avatar=$('rivalAvatar'); bubble.textContent=line; for(const el of [bubble,avatar]){el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');} if(audio && !drag) sound('rival'); }
 function scheduleRival() {
   clearTimeout(rivalTimer); rivalTimer = null;
   if (!rivalEnabled || won || !imageURL) return;
   const [min,max] = RIVAL_INTERVAL_MS;
   rivalTimer = setTimeout(() => {
     if (!rivalEnabled || won || !imageURL) return;
+    if (drag || settling) { scheduleRival(); return; }
     if (!rivalDeck.length) { rivalDeck=shuffle(RIVAL_LINES.map((_,i)=>i)); if (rivalDeck.length>1 && rivalDeck[rivalDeck.length-1]===lastRivalLine) [rivalDeck[0],rivalDeck[rivalDeck.length-1]]=[rivalDeck[rivalDeck.length-1],rivalDeck[0]]; }
     lastRivalLine = rivalDeck.pop(); rivalSay(RIVAL_LINES[lastRivalLine]);
     scheduleRival();
@@ -104,27 +110,106 @@ function sound(kind) {
 }
 function shuffle(a) { for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
 function reset() {
-  stopRival(); $('rivalAvatar').classList.remove('defeated'); clearInterval(timer); won=false; selected=null; moves=0; started=Date.now(); $('moves').textContent='0'; $('time').textContent='00:00'; board.classList.remove('won'); $('notice').textContent='點選兩塊拼圖來交換位置。'; $('notice').className='notice';
+  cancelDrag(); clearTimeout(settleTimer); settling=false; stopRival(); $('rivalAvatar').classList.remove('defeated'); clearInterval(timer); won=false; selected=null; moves=0; started=Date.now(); $('moves').textContent='0'; $('time').textContent='00:00'; board.classList.remove('won'); $('notice').textContent='拖到另一塊，放開就交換；也可以點選兩塊。'; $('notice').className='notice';
   const count=Number(difficulty.value)**2; do {tiles=shuffle(Array.from({length:count},(_,i)=>i));} while(tiles.every((n,i)=>n===i));
   timer=setInterval(()=>{const s=Math.floor((Date.now()-started)/1000);$('time').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');},1000); $('rivalSpeech').textContent=rivalEnabled?rivalStart():'路人安靜吃瓜中。'; scheduleRival(); render();
 }
 function render() {
+  cancelDrag();
   const n=Number(difficulty.value); board.style.gridTemplateColumns=`repeat(${n},1fr)`; board.replaceChildren();
   const classic=$('shape').value==='classic'; board.classList.toggle('classic',classic);
   if(classic && shapeSize!==n) makePuzzleShapes(n);
-  tiles.forEach((tile,i)=>{const b=document.createElement('button'); b.type='button'; b.className='tile'+(tile===i?' correct':'')+(selected===i?' selected':''); b.style.backgroundImage=`url(${JSON.stringify(imageURL)})`; if(classic){b.style.position='absolute';b.style.width=b.style.height=`${140/n}%`;b.style.left=`${((i%n)-.2)*100/n}%`;b.style.top=`${(Math.floor(i/n)-.2)*100/n}%`;b.style.clipPath=`url(#piece-${tile})`;b.style.backgroundSize=`${n/1.4*100}% ${n/1.4*100}%`;b.style.backgroundPosition=`${((tile%n)-.2)*100/(n-1.4)}% ${(Math.floor(tile/n)-.2)*100/(n-1.4)}%`;b.style.zIndex=selected===i?'2':tile===i?'1':'0';}else{b.style.backgroundSize=`${n*100}% ${n*100}%`; b.style.backgroundPosition=`${(tile%n)*100/(n-1)}% ${Math.floor(tile/n)*100/(n-1)}%`;} b.setAttribute('aria-label',`位置 ${i+1}，拼圖片 ${tile+1}${tile===i?'，已歸位':''}`); b.addEventListener('click',()=>choose(i)); board.append(b);});
+  tiles.forEach((tile,i)=>{const b=document.createElement('button'); b.type='button'; b.className='tile'+(tile===i?' correct':'')+(selected===i?' selected':''); b.style.backgroundImage=`url(${JSON.stringify(imageURL)})`; if(classic){b.style.position='absolute';b.style.width=b.style.height=`${140/n}%`;b.style.left=`${((i%n)-.2)*100/n}%`;b.style.top=`${(Math.floor(i/n)-.2)*100/n}%`;b.style.clipPath=`url(#piece-${tile})`;b.style.backgroundSize=`${n/1.4*100}% ${n/1.4*100}%`;b.style.backgroundPosition=`${((tile%n)-.2)*100/(n-1.4)}% ${(Math.floor(tile/n)-.2)*100/(n-1.4)}%`;b.style.zIndex=selected===i?'2':tile===i?'1':'0';}else{b.style.backgroundSize=`${n*100}% ${n*100}%`; b.style.backgroundPosition=`${(tile%n)*100/(n-1)}% ${Math.floor(tile/n)*100/(n-1)}%`;} b.setAttribute('aria-label',`位置 ${i+1}，拼圖片 ${tile+1}${tile===i?'，已歸位':''}`); b.dataset.index=i; b.addEventListener('click',e=>{if(!e.detail || Date.now()>suppressClickUntil)choose(i);}); board.append(b);});
   const correct=tiles.filter((x,i)=>x===i).length; $('progress').textContent=`${correct} / ${tiles.length}`; $('progressFill').style.width=`${correct/tiles.length*100}%`;
 }
 function choose(i) {
-  if(won) return;
+  if(won || settling || drag) return;
   if(selected===null){selected=i;sound('select');render();board.children[i].focus();return;}
   if(selected===i){selected=null;render();board.children[i].focus();return;}
-  const other=selected, before=[tiles[i]===i,tiles[other]===other]; [tiles[i],tiles[other]]=[tiles[other],tiles[i]]; selected=null; moves++; $('moves').textContent=moves; render(); board.children[i].focus();
+  swapTiles(selected,i);
+}
+function swapTiles(other,i) {
+  if(won || settling || i===other) return;
+  const oldRects=Array.from(board.children,el=>el.getBoundingClientRect());
+  const before=[tiles[i]===i,tiles[other]===other]; [tiles[i],tiles[other]]=[tiles[other],tiles[i]]; selected=null; moves++; $('moves').textContent=moves; render(); board.children[i].focus();
+  settling=true; clearTimeout(settleTimer); settleTimer=setTimeout(()=>{settling=false;},180);
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches) for(const pos of [i,other]) {
+    const el=board.children[pos], from=oldRects[pos===i?other:i], to=el.getBoundingClientRect();
+    el.animate([{transform:`translate(${from.left-to.left}px,${from.top-to.top}px)`},{transform:'translate(0,0)'}],{duration:160,easing:'cubic-bezier(.2,.8,.3,1)'});
+  }
+  vibrate(12);
   const placed=[i,other].filter((pos,k)=>tiles[pos]===pos&&!before[k]);
   placed.forEach(pos=>board.children[pos].classList.add('flash'));
   if(tiles.every((x,pos)=>x===pos)) { won=true; clearInterval(timer); stopRival(); victoryTimer=setTimeout(()=>{ $('rivalAvatar').classList.add('defeated'); if(rivalEnabled){ let i=Math.floor(Math.random()*(VICTORY_LINES.length-(lastVictoryLine>=0?1:0))); if(lastVictoryLine>=0 && i>=lastVictoryLine) i++; lastVictoryLine=i; rivalSay(VICTORY_LINES[i]); } },1000); board.classList.add('won'); $('notice').className='notice win'; $('notice').textContent=`✦ 太棒了，拼圖完成！共用了 ${moves} 步，花費 ${$('time').textContent}。`; sound('win'); }
   else sound(placed.length?'correct':'swap');
 }
+
+function vibrate(ms) { if(hapticsEnabled && navigator.vibrate) { try { navigator.vibrate(ms); } catch(_) {} } }
+function boardGeometry() {
+  const r=board.getBoundingClientRect();
+  return {left:r.left+board.clientLeft,top:r.top+board.clientTop,width:board.clientWidth,height:board.clientHeight};
+}
+function dragTarget(x,y,g,n,current) {
+  if(x<g.left || y<g.top || x>=g.left+g.width || y>=g.top+g.height) return null;
+  const col=(x-g.left)/g.width*n,row=(y-g.top)/g.height*n;
+  if(current!==null && col>=current%n-.08 && col<current%n+1.08 && row>=Math.floor(current/n)-.08 && row<Math.floor(current/n)+1.08) return current;
+  return Math.floor(row)*n+Math.floor(col);
+}
+function cancelDrag() {
+  if(!drag) return;
+  const d=drag; drag=null;
+  d.ghost?.remove(); d.marker?.remove(); d.el.classList.remove('drag-source'); board.classList.remove('dragging');
+  if(board.hasPointerCapture(d.id))board.releasePointerCapture(d.id);
+}
+board.addEventListener('pointerdown',e=>{
+  if(drag || won || settling || !e.isPrimary || e.button!==0) return;
+  const el=e.target.closest('.tile'); if(!el)return;
+  const index=Number(el.dataset.index),g=boardGeometry(),n=Number(difficulty.value);
+  drag={id:e.pointerId,el,index,x:e.clientX,y:e.clientY,g,n,target:null,active:false};
+  board.setPointerCapture(e.pointerId);
+});
+board.addEventListener('pointermove',e=>{
+  if(!drag || drag.id!==e.pointerId)return;
+  const d=drag,dx=e.clientX-d.x,dy=e.clientY-d.y;
+  if(!d.active && Math.hypot(dx,dy)<8)return;
+  if(!d.active){
+    d.active=true; selected=null; board.querySelectorAll('.selected').forEach(el=>el.classList.remove('selected'));
+    const r=d.el.getBoundingClientRect(); d.ghost=d.el.cloneNode(true); d.ghost.className='tile drag-ghost';
+    d.ghost.removeAttribute('aria-label');d.ghost.setAttribute('aria-hidden','true');d.ghost.tabIndex=-1;
+    Object.assign(d.ghost.style,{left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px'});
+    document.body.append(d.ghost); d.el.classList.add('drag-source'); board.classList.add('dragging');
+    d.marker=document.createElement('div');d.marker.className='drop-target';board.append(d.marker);sound('select');
+  }
+  d.ghost.style.transform=`translate(${dx}px,${dy}px) scale(1.03)`;
+  const x=d.g.left+(d.index%d.n+.5)*d.g.width/d.n+dx,y=d.g.top+(Math.floor(d.index/d.n)+.5)*d.g.height/d.n+dy;
+  d.target=dragTarget(x,y,d.g,d.n,d.target);
+  if(e.clientX<d.g.left || e.clientY<d.g.top || e.clientX>=d.g.left+d.g.width || e.clientY>=d.g.top+d.g.height)d.target=null;
+  d.marker.hidden=d.target===null || d.target===d.index;
+  if(!d.marker.hidden)Object.assign(d.marker.style,{left:(d.target%d.n)*100/d.n+'%',top:Math.floor(d.target/d.n)*100/d.n+'%',width:100/d.n+'%',height:100/d.n+'%'});
+});
+board.addEventListener('pointerup',e=>{
+  if(!drag || drag.id!==e.pointerId)return;
+  // Re-evaluate the final pointer position before committing the previewed target.
+  board.dispatchEvent(new PointerEvent('pointermove',{pointerId:e.pointerId,clientX:e.clientX,clientY:e.clientY}));
+  const d=drag;
+  if(d.active){
+    suppressClickUntil=Date.now()+500;
+    if(d.target===null || d.target===d.index){
+      const ghost=d.ghost;d.ghost=null;
+      const motion=ghost.animate([{transform:ghost.style.transform},{transform:'translate(0,0) scale(1)'}],{duration:matchMedia('(prefers-reduced-motion: reduce)').matches?0:140});motion.onfinish=()=>ghost.remove();
+    }
+  }
+  cancelDrag();
+  if(d.active && d.target!==null && d.target!==d.index)swapTiles(d.index,d.target);
+});
+board.addEventListener('pointercancel',()=>{if(drag?.active)suppressClickUntil=Date.now()+500;cancelDrag();});
+board.addEventListener('lostpointercapture',cancelDrag);
+document.addEventListener('keydown',e=>{if(e.key==='Escape' && drag){suppressClickUntil=Date.now()+500;cancelDrag();}});
+window.addEventListener('resize',cancelDrag);window.addEventListener('blur',cancelDrag);
+window.addEventListener('scroll',cancelDrag,{passive:true});
+$('haptics').hidden=!navigator.vibrate;
+$('haptics').addEventListener('click',()=>{hapticsEnabled=!hapticsEnabled;$('haptics').setAttribute('aria-pressed',String(hapticsEnabled));$('haptics').textContent=hapticsEnabled?'震動：開':'震動：關';});
+
 function setPreview(show) {
   document.getElementById('preview').classList.toggle('hidden', !show);
   document.getElementById('previewButton').setAttribute('aria-expanded', String(show));
@@ -136,6 +221,7 @@ function fallback() {
 }
 function loadImage(url) {return new Promise((resolve,reject)=>{const img=new Image();img.crossOrigin='anonymous';const timeout=setTimeout(()=>{img.src='';reject(new Error('圖片載入逾時'));},12000);img.onload=()=>{clearTimeout(timeout);resolve(img);};img.onerror=()=>{clearTimeout(timeout);reject(new Error('圖片載入失敗或跨域遭拒'));};img.src=url;});}
 async function newGame() {
+  cancelDrag(); clearTimeout(settleTimer); settling=false;
   const id=++gameId, topic=theme.value; shapeSize=0; imageURL=''; clearInterval(timer); stopRival(); $('rivalAvatar').classList.remove('defeated'); won=true; selected=null; board.replaceChildren(); $('notice').className='notice'; $('notice').textContent='正在尋找圖片…'; $('source').replaceChildren(); setPreview(false); $('previewButton').disabled=true;
   try {
     const results=await Promise.allSettled(categories[topic].map(async category=>{
