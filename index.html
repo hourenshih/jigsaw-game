@@ -32,6 +32,9 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 <style>
 .board{touch-action:none;user-select:none;-webkit-user-select:none}.tile{cursor:grab;-webkit-user-drag:none}.tile:hover,.tile:active{transform:none}.board.dragging .tile{cursor:grabbing}.tile.drag-source{opacity:.25}.drop-target{position:absolute;pointer-events:none;z-index:5;border:4px solid #ffe498;border-radius:8px;background:#ffe49822;box-shadow:inset 0 0 0 2px #263c3b}.drag-ghost{position:fixed!important;margin:0;pointer-events:none;z-index:1000!important;opacity:.95;filter:drop-shadow(0 7px 5px #0008);transition:none!important;transform:scale(1.03)}
 </style>
+<style>
+.preview-panel{grid-column:1/-1;min-width:0;scroll-margin-top:16px}.preview-panel .preview{display:block}.preview-panel button{display:block;width:100%;margin-top:10px;min-height:44px}.board{scroll-margin-top:16px}.preview-panel:focus-visible{outline:3px solid #ffe498;outline-offset:4px}
+</style>
 </head>
 <body>
 <main>
@@ -44,12 +47,12 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 <button class="primary" id="newGame">新遊戲</button>
 <button id="restart">重新開始</button>
 <button id="haptics" type="button" aria-pressed="true" hidden>震動：開</button>
-<button id="previewButton" aria-expanded="false">預覽完整圖片</button>
+<button id="previewButton" aria-expanded="false" aria-controls="previewPanel">預覽完整圖片</button>
 </div>
 <div class="stats"><span class="stat">✦ 步數 <strong id="moves">0</strong></span><span class="stat">◷ 時間 <strong id="time">00:00</strong></span></div>
 <div class="progress-wrap"><span>拼圖進度</span><div class="progress-track" aria-hidden="true"><div id="progressFill" class="progress-fill"></div></div><span id="progress"></span></div>
 <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs id="puzzleClips"></defs></svg>
-<div class="layout"><div id="board" class="board" aria-label="拼圖區"></div><aside class="side"><p class="side-title">✦ 拼圖小幫手</p><img id="preview" class="preview hidden" alt="本局完整圖片"><div id="notice" class="notice" role="status" aria-live="polite"></div><div id="source" class="source"></div><section class="rival" aria-label="吃瓜路人"><div class="rival-head"><span>吃瓜路人</span><button id="rivalToggle" type="button" aria-pressed="true">吐槽：開</button></div><div id="rivalAvatar" class="rival-avatar" role="img" aria-label="吃瓜路人肖像"></div><p id="rivalSpeech" class="rival-speech" aria-live="polite" tabindex="-1">瓜已備好，請開始你的表演。</p></section></aside></div>
+<div class="layout"><div id="board" class="board" aria-label="拼圖區" tabindex="-1"></div><aside class="side"><p class="side-title">✦ 拼圖小幫手</p><div id="previewPanel" class="preview-panel hidden" tabindex="-1" role="region" aria-label="完整圖片預覽"><img id="preview" class="preview" alt="本局完整圖片"><button id="returnToBoard" type="button">↑ 返回拼圖</button></div><div id="notice" class="notice" role="status" aria-live="polite"></div><div id="source" class="source"></div><section class="rival" aria-label="吃瓜路人"><div class="rival-head"><span>吃瓜路人</span><button id="rivalToggle" type="button" aria-pressed="true">吐槽：開</button></div><div id="rivalAvatar" class="rival-avatar" role="img" aria-label="吃瓜路人肖像"></div><p id="rivalSpeech" class="rival-speech" aria-live="polite" tabindex="-1">瓜已備好，請開始你的表演。</p></section></aside></div>
 </section>
 </main>
 <script>
@@ -67,6 +70,7 @@ const board = $('board'), theme = $('theme'), difficulty = $('difficulty');
 const categories = {animals:['Category:Kittens'], funny:['Category:Internet memes','Category:Memes and image macros','Category:Lolcats','Category:Image macros with animals'], food:['Category:Food photography'], landscape:['Category:Landscape photography'], toys:['Category:Toys','Category:Close-up photographs of toys'], illustration:["Category:Children's book illustrations"], challenge:['Category:Geometric patterns','Category:Quality images of patterns and textures']};
 const recent = {animals:[], funny:[], food:[], landscape:[], toys:[], illustration:[], challenge:[]};
 let tiles = [], selected = null, moves = 0, started = 0, timer = null, won = false, imageURL = '', gameId = 0, audio;
+let viewingPreview = false;
 let drag = null, suppressClickUntil = 0, settling = false, settleTimer = null, hapticsEnabled = true;
 let shapeSize = 0;
 function makePuzzleShapes(n) {
@@ -87,14 +91,14 @@ function makePuzzleShapes(n) {
 }
 let rivalEnabled = true, rivalTimer = null, rivalAlertTimer = null, victoryTimer = null, lastVictoryLine = -1, lastRivalLine = -1, rivalDeck = [];
 function stopRival() { clearTimeout(rivalTimer); clearTimeout(rivalAlertTimer); clearTimeout(victoryTimer); rivalTimer = null; }
-function rivalSay(line) { const bubble=$('rivalSpeech'), avatar=$('rivalAvatar'); bubble.textContent=line; for(const el of [bubble,avatar]){el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');} if(audio && !drag) sound('rival'); }
+function rivalSay(line) { const bubble=$('rivalSpeech'), avatar=$('rivalAvatar'); bubble.textContent=line; if(viewingPreview)return; for(const el of [bubble,avatar]){el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');} if(audio && !drag) sound('rival'); }
 function scheduleRival() {
   clearTimeout(rivalTimer); rivalTimer = null;
   if (!rivalEnabled || won || !imageURL) return;
   const [min,max] = RIVAL_INTERVAL_MS;
   rivalTimer = setTimeout(() => {
     if (!rivalEnabled || won || !imageURL) return;
-    if (drag || settling) { scheduleRival(); return; }
+    if (drag || settling || viewingPreview) { scheduleRival(); return; }
     if (!rivalDeck.length) { rivalDeck=shuffle(RIVAL_LINES.map((_,i)=>i)); if (rivalDeck.length>1 && rivalDeck[rivalDeck.length-1]===lastRivalLine) [rivalDeck[0],rivalDeck[rivalDeck.length-1]]=[rivalDeck[rivalDeck.length-1],rivalDeck[0]]; }
     lastRivalLine = rivalDeck.pop(); rivalSay(RIVAL_LINES[lastRivalLine]);
     scheduleRival();
@@ -210,11 +214,24 @@ window.addEventListener('scroll',cancelDrag,{passive:true});
 $('haptics').hidden=!navigator.vibrate;
 $('haptics').addEventListener('click',()=>{hapticsEnabled=!hapticsEnabled;$('haptics').setAttribute('aria-pressed',String(hapticsEnabled));$('haptics').textContent=hapticsEnabled?'震動：開':'震動：關';});
 
-function setPreview(show) {
-  document.getElementById('preview').classList.toggle('hidden', !show);
-  document.getElementById('previewButton').setAttribute('aria-expanded', String(show));
-  document.getElementById('previewButton').textContent = show ? '關閉預覽' : '預覽完整圖片';
+function goToSection(el) {
+  el.focus({preventScroll:true});
+  const rect=el.getBoundingClientRect();
+  if(rect.top>=16 && rect.bottom<=window.innerHeight-16)return;
+  el.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});
 }
+function setPreview(show, navigate=false) {
+  $('previewPanel').classList.toggle('hidden', !show);
+  $('previewButton').setAttribute('aria-expanded', String(show));
+  $('previewButton').textContent = show ? '關閉預覽' : '預覽完整圖片';
+  viewingPreview=show && navigate;
+  if(viewingPreview)for(const id of ['rivalAvatar','rivalSpeech'])$(id).classList.remove('pop');
+  scheduleRival();
+  if(navigate)goToSection(show?$('previewPanel'):board);
+}
+$('returnToBoard').addEventListener('click',()=>{
+  viewingPreview=false; scheduleRival(); goToSection(board);
+});
 function fallback() {
   const c=document.createElement('canvas'); c.width=c.height=720; const x=c.getContext('2d'), hue=Math.floor(Math.random()*360); const grad=x.createLinearGradient(0,0,720,720); grad.addColorStop(0,`hsl(${hue} 45% 35%)`); grad.addColorStop(1,`hsl(${(hue+100)%360} 55% 65%)`); x.fillStyle=grad;x.fillRect(0,0,720,720);
   for(let i=0;i<25;i++){x.fillStyle=`hsla(${(hue+Math.random()*160)%360} 65% 75% / .55)`;x.beginPath();x.arc(Math.random()*720,Math.random()*720,25+Math.random()*120,0,Math.PI*2);x.fill();} return c.toDataURL();
@@ -239,7 +256,7 @@ async function newGame() {
   } catch(error) {if(id!==gameId)return;imageURL=fallback();$('source').textContent='網路圖片載入失敗，使用隨機圖案。';}
   $('preview').src=imageURL; $('previewButton').disabled=false; reset();
 }
-$('newGame').addEventListener('click',newGame); theme.addEventListener('change',newGame); difficulty.addEventListener('change',()=>{if(imageURL)reset();}); $('restart').addEventListener('click',()=>{if(imageURL)reset();}); document.getElementById('previewButton').addEventListener('click',()=>setPreview(document.getElementById('preview').classList.contains('hidden')));
+$('newGame').addEventListener('click',newGame); theme.addEventListener('change',newGame); difficulty.addEventListener('change',()=>{if(imageURL)reset();}); $('restart').addEventListener('click',()=>{if(imageURL)reset();}); document.getElementById('previewButton').addEventListener('click',()=>setPreview($('previewPanel').classList.contains('hidden'),true));
 $('shape').addEventListener('change',()=>{if(imageURL)render();});
 $('rivalToggle').addEventListener('click',()=>{rivalEnabled=!rivalEnabled; $('rivalToggle').setAttribute('aria-pressed',String(rivalEnabled)); $('rivalToggle').textContent=rivalEnabled?'吐槽：開':'吐槽：關'; $('rivalSpeech').textContent=rivalEnabled?(won?'等下一局再來吃瓜！':'路人回來圍觀啦！'):'路人安靜吃瓜中。'; if(rivalEnabled) scheduleRival(); else stopRival();});
 console.assert(shuffle([0]).length===1 && [0,1,2].every((x,i)=>x===i),'基本拼圖檢查失敗');
